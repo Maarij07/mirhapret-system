@@ -9,5 +9,12 @@ namespace pos;
 /// </summary>
 public partial class App : Application
 {
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        AppDomain.CurrentDomain.UnhandledException += (s, ex) =>
+        {
+            MessageBox.Show($"Unhandled Exception: {ex.ExceptionObject}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        };
+    }
 }
-

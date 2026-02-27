@@ -1,12 +1,222 @@
 ﻿<Window x:Class="pos.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:pos"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        xmlns:local="clr-namespace:pos.Utils"
+        Title="MirhaPret POS System" 
+        Height="600" 
+        Width="1000"
+        Background="#f5f5f5"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+    </Window.Resources>
     <Grid>
+        <!-- Header -->
+        <Grid Height="50" VerticalAlignment="Top" Background="#000000">
+            <TextBlock Text="MirhaPret POS System" 
+                       Foreground="#ffffff" 
+                       FontSize="20"
+                       FontWeight="Bold"
+                       Margin="20,0"
+                       VerticalAlignment="Center"/>
+        </Grid>
 
+        <!-- Main Content -->
+        <Grid Margin="0,50,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Barcode/Search Input -->
+            <StackPanel Grid.Column="0" Margin="20">
+                <!-- Error Message -->
+                <TextBlock Text="{Binding ErrorMessage}" 
+                           Foreground="#c0392b" 
+                           FontSize="11" 
+                           Margin="0,0,0,8"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                <!-- Search/Barcode Input -->
+                <TextBlock Text="Scan or Search Product" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBox Padding="10,10" 
+                                 FontSize="14"
+                                 Background="#ffffff"
+                                 BorderBrush="#e0e0e0"
+                                 BorderThickness="1"
+                                 Margin="0,0,8,0"
+                                 Text="{Binding SearchInput, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Border Background="#ffffff" BorderBrush="#e0e0e0" BorderThickness="1" Margin="0,0,8,0" 
+                                Visibility="{Binding SearchSuggestions.Count, Converter={StaticResource CountToVisibilityConverter}}">
+                            <ListBox ItemsSource="{Binding SearchSuggestions}" 
+                                     Background="#ffffff"
+                                     BorderThickness="0"
+                                     MaxHeight="150"
+                                     Padding="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext.SelectProductCommand}" 
+                                                CommandParameter="{Binding}"
+                                                Background="transparent"
+                                                BorderThickness="0"
+                                                Padding="10,8"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12"/>
+                                                <TextBlock Text="{Binding Barcode, StringFormat='SKU: {0}'}" FontSize="10" Foreground="#666666"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </StackPanel>
+                    <Button Grid.Column="1" 
+                            Content="Add" 
+                            Background="#000000" 
+                            Foreground="#ffffff"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            Cursor="Hand"
+                            Padding="20,10"
+                            Command="{Binding AddToCartCommand}"/>
+                </Grid>
+
+                <!-- Cart Items List -->
+                <TextBlock Text="Cart Items" FontSize="14" FontWeight="Bold" Margin="0,0,0,12"/>
+                <Border Background="#ffffff" BorderBrush="#e0e0e0" BorderThickness="1" Padding="12" Height="350" VerticalAlignment="Top">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding CartItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#f5f5f5" Padding="10" Margin="0,0,0,8" BorderBrush="#e0e0e0" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Product Image (Square) -->
+                                            <Border Grid.Column="0" Width="50" Height="50" Background="#e0e0e0" BorderBrush="#999999" BorderThickness="1" Margin="0,0,10,0">
+                                                <TextBlock Text="IMG" VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="#666666" FontSize="10" FontWeight="Bold"/>
+                                            </Border>
+                                            <!-- Product Info -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding ProductName}" FontWeight="Bold" FontSize="12"/>
+                                                <TextBlock FontSize="10" Foreground="#666666" Margin="0,4,0,0">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} | PKR {1:N0}">
+                                                            <Binding Path="Barcode"/>
+                                                            <Binding Path="UnitPrice"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <!-- Quantity Controls -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,10,0">
+                                                <Button Content="-" Background="#ffffff" BorderBrush="#000000" BorderThickness="1" Width="20" Height="20" FontSize="10" Padding="0" Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext.DecreaseQuantityCommand}" CommandParameter="{Binding}"/>
+                                                <TextBlock Text="{Binding Quantity}" VerticalAlignment="Center" HorizontalAlignment="Center" Width="20" TextAlignment="Center" FontWeight="Bold"/>
+                                                <Button Content="+" Background="#ffffff" BorderBrush="#000000" BorderThickness="1" Width="20" Height="20" FontSize="10" Padding="0" Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext.IncreaseQuantityCommand}" CommandParameter="{Binding}"/>
+                                            </StackPanel>
+                                            <!-- Remove Button -->
+                                            <Button Grid.Column="3" Content="Remove" Background="#ffffff" BorderBrush="#e0e0e0" BorderThickness="1" FontSize="10" Padding="8,4" Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=DataContext.RemoveFromCartCommand}" CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+
+            <!-- Right: Order Summary -->
+            <Border Grid.Column="1" Background="#ffffff" BorderBrush="#e0e0e0" BorderThickness="1" Margin="0,20,20,20" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="Order Summary" FontSize="14" FontWeight="Bold" Margin="0,0,0,16"/>
+                    
+                    <!-- Totals -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Subtotal:" FontSize="12"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Subtotal, StringFormat='PKR {0:N0}'}" FontSize="12" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Tax (17%):" FontSize="12"/>
+                        <TextBlock Grid.Column="1" Text="{Binding TaxAmount, StringFormat='PKR {0:N0}'}" FontSize="12" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Discount:" FontSize="12"/>
+                        <TextBlock Grid.Column="1" Text="{Binding DiscountAmount, StringFormat='PKR {0:N0}'}" FontSize="12" FontWeight="Bold"/>
+                    </Grid>
+
+                    <Border Height="1" Background="#e0e0e0" Margin="0,8,0,8"/>
+
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Total:" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Total, StringFormat='PKR {0:N0}'}" FontSize="14" FontWeight="Bold"/>
+                    </Grid>
+
+                    <!-- Promo Code -->
+                    <TextBlock Text="Promo Code" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Padding="8,6" FontSize="11" Background="#ffffff" BorderBrush="#e0e0e0" BorderThickness="1" Margin="0,0,6,0" Text="{Binding PromoCode, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="1" Content="Apply" Background="#000000" Foreground="#ffffff" FontSize="10" FontWeight="Bold" Command="{Binding ApplyPromoCommand}"/>
+                    </Grid>
+
+                    <!-- Complete Sale Button -->
+                    <Button Content="Complete Sale" 
+                            Background="#000000" 
+                            Foreground="#ffffff"
+                            FontSize="12"
+                            FontWeight="Bold"
+                            Padding="0,12"
+                            Cursor="Hand"
+                            Command="{Binding CompleteSaleCommand}"/>
+
+                    <!-- Clear Cart Button -->
+                    <Button Content="Clear Cart" 
+                            Background="#ffffff" 
+                            Foreground="#000000"
+                            BorderBrush="#000000"
+                            BorderThickness="1"
+                            FontSize="11"
+                            Padding="0,8"
+                            Margin="0,8,0,0"
+                            Cursor="Hand"
+                            Command="{Binding ClearCartCommand}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
