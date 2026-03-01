@@ -1,9 +1,15 @@
 # Deployment Instructions for Render + Supabase
 
+⚠️ **NOTE:** Render requires credit card (even for free tier with $1 charge). 
+👉 **RECOMMENDED:** Use **Cyclic** instead - completely free, no CC needed!  
+See `CYCLIC_DEPLOYMENT.md` for the best option.
+
+---
+
 ## Prerequisites
 1. GitHub repository with your code pushed ✅
-2. Render account (free at https://render.com)
-3. Supabase account (free PostgreSQL at https://supabase.com)
+2. Render account (free at https://render.com) - requires CC
+3. Supabase account (free PostgreSQL at https://supabase.com) - NO CC
 
 ## Step 1: Create Supabase Account (Database)
 1. Go to https://supabase.com and sign up (free, **NO CREDIT CARD**)
@@ -48,8 +54,8 @@ DB_DATABASE=postgres
 DB_SYNCHRONIZE=true
 DB_LOGGING=false
 
-JWT_SECRET=<generate-a-random-32-char-string>
-JWT_REFRESH_SECRET=<generate-another-32-char-string>
+JWT_SECRET=2ea138f234a325b7c98f3a7739ea6435
+JWT_REFRESH_SECRET=7c4b49856c76146153492ea0e44e871d
 JWT_ACCESS_EXPIRATION=15m
 JWT_REFRESH_EXPIRATION=7d
 
