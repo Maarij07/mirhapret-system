@@ -1,17 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
-
+  @SkipThrottle()
   @Get('health')
-  getHealth(): { status: string } {
-    return { status: 'ok' };
-  }
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  getHealth(): { status: string; timestamp: string } {
+    return { status: 'ok', timestamp: new Date().toISOString() };
   }
 }

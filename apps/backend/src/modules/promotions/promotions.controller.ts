@@ -20,6 +20,17 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class PromotionsController {
   constructor(private promotionsService: PromotionsService) {}
 
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  @Roles('admin', 'super_admin')
+  async getAllPromotions() {
+    const promotions = await this.promotionsService.getAllPromotions();
+    return {
+      message: 'All promotions retrieved successfully',
+      data: promotions,
+    };
+  }
+
   @Get('active')
   @UseGuards(JwtAuthGuard)
   async getActivePromotions() {
@@ -34,8 +45,8 @@ export class PromotionsController {
   @UseGuards(JwtAuthGuard)
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.CREATED)
-  async createPromotion(@Body() createPromotionDto: CreatePromotionDto) {
-    const promotion = await this.promotionsService.createPromotion(createPromotionDto);
+  async createPromotion(@Body() createPromotionDto: CreatePromotionDto, @CurrentUser() user: any) {
+    const promotion = await this.promotionsService.createPromotion(createPromotionDto, user.id);
     return {
       message: 'Promotion created successfully',
       data: promotion,
@@ -102,8 +113,8 @@ export class PromoCodesController {
   @UseGuards(JwtAuthGuard)
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.CREATED)
-  async createPromoCode(@Body() createPromoCodeDto: CreatePromoCodeDto) {
-    const promoCode = await this.promotionsService.createPromoCode(createPromoCodeDto);
+  async createPromoCode(@Body() createPromoCodeDto: CreatePromoCodeDto, @CurrentUser() user: any) {
+    const promoCode = await this.promotionsService.createPromoCode(createPromoCodeDto, user.id);
     return {
       message: 'Promo code created successfully',
       data: promoCode,
@@ -115,7 +126,7 @@ export class PromoCodesController {
   @Roles('admin', 'super_admin')
   async updatePromoCode(
     @Param('id') id: string,
-    @Body() updateData: Partial<any>,
+    @Body() updateData: Partial<CreatePromoCodeDto>,
   ) {
     const promoCode = await this.promotionsService.updatePromoCode(id, updateData);
     return {

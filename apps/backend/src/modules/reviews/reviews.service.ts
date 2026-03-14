@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ProductReview, Product, Order, OrderItem } from '../../entities';
 import { CreateReviewDto, UpdateReviewDto, ApproveReviewDto } from './dto';
 
@@ -79,9 +79,9 @@ export class ReviewsService {
 
     // Check if any of the delivered orders contain the product
     const orderIds = userOrders.map(o => o.id);
-    const orderItemExists = orderIds.length > 0 
+    const orderItemExists = orderIds.length > 0
       ? await this.orderItemRepository.findOne({
-          where: { order_id: orderIds[0], product_id: createReviewDto.product_id },
+          where: { order_id: In(orderIds), product_id: createReviewDto.product_id },
         })
       : null;
 

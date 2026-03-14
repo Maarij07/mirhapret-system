@@ -1,5 +1,6 @@
 import {
   Injectable,
+  OnModuleInit,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,8 +8,10 @@ import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
-export class CloudinaryService {
-  constructor(private configService: ConfigService) {
+export class CloudinaryService implements OnModuleInit {
+  constructor(private configService: ConfigService) {}
+
+  onModuleInit() {
     cloudinary.config({
       cloud_name: this.configService.get('CLOUDINARY_CLOUD_NAME'),
       api_key: this.configService.get('CLOUDINARY_API_KEY'),
@@ -16,52 +19,42 @@ export class CloudinaryService {
     });
   }
 
-  async uploadImage(file: any, folder: string = 'ecommerce'): Promise<any> {
+  async uploadImage(file: any, folder = 'ecommerce'): Promise<any> {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
 
     const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!validMimes.includes(file.mimetype)) {
-      throw new BadRequestException(
-        'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed',
-      );
+      throw new BadRequestException('Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed');
     }
 
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
+    if (file.size > 5 * 1024 * 1024) {
       throw new BadRequestException('File size exceeds 5MB limit');
     }
 
     try {
-      const result = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
+      const result: any = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
           {
             folder,
             resource_type: 'auto',
             quality: 'auto',
             fetch_format: 'auto',
-            transformation: [
-              { quality: 'auto', fetch_format: 'auto' },
-              { width: 1000, crop: 'scale' },
-            ],
+            transformation: [{ width: 1000, crop: 'scale' }],
           },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          },
+          (error, res) => (error ? reject(error) : resolve(res)),
         );
-
-        uploadStream.end(file.buffer);
+        stream.end(file.buffer);
       });
 
       return {
-        id: (result as any).public_id,
-        url: (result as any).secure_url,
-        width: (result as any).width,
-        height: (result as any).height,
-        size: (result as any).bytes,
-        format: (result as any).format,
+        id: result.public_id,
+        url: result.secure_url,
+        width: result.width,
+        height: result.height,
+        size: result.bytes,
+        format: result.format,
       };
     } catch (error) {
       throw new BadRequestException(`Upload failed: ${error.message}`);
@@ -72,7 +65,6 @@ export class CloudinaryService {
     if (!publicId) {
       throw new BadRequestException('Public ID is required');
     }
-
     try {
       const result = await cloudinary.uploader.destroy(publicId);
       if (result.result !== 'ok') {
@@ -84,18 +76,16 @@ export class CloudinaryService {
     }
   }
 
-  async updateImage(publicId: string, updates: any): Promise<any> {
+  async updateImage(publicId: string, updates: { tags?: string[]; context?: Record<string, any> }): Promise<any> {
     if (!publicId) {
       throw new BadRequestException('Public ID is required');
     }
-
     try {
       const result = await cloudinary.uploader.explicit(publicId, {
         type: 'upload',
         tags: updates.tags || [],
         context: updates.context || {},
       });
-
       return {
         id: result.public_id,
         url: result.secure_url,
@@ -107,21 +97,14 @@ export class CloudinaryService {
     }
   }
 
-  async getImageUrl(publicId: string, transformations?: any): Promise<string> {
+  getImageUrl(publicId: string, transformations?: Record<string, any>): string {
     if (!publicId) {
       throw new BadRequestException('Public ID is required');
     }
-
-    const defaultTransformations = {
+    return cloudinary.url(publicId, {
       quality: 'auto',
       fetch_format: 'auto',
-    };
-
-    const finalTransformations = {
-      ...defaultTransformations,
       ...transformations,
-    };
-
-    return cloudinary.url(publicId, finalTransformations);
+    });
   }
 }

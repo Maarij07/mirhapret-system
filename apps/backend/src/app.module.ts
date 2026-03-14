@@ -4,8 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import {
   User,
   Category,
@@ -102,12 +102,10 @@ import { RolesGuard } from './common/guards/roles.guard';
       inject: [ConfigService],
     }),
 
-    // Rate Limiting/Throttling
+    // Rate Limiting — tiered: short burst + sustained per minute
     ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 1 minute window
-        limit: 100, // 100 requests per minute
-      },
+      { name: 'short', ttl: 1000,  limit: 10  },  // 10 req/sec  burst protection
+      { name: 'long',  ttl: 60000, limit: 100 },  // 100 req/min sustained limit
     ]),
 
     // Feature Modules
@@ -130,7 +128,12 @@ import { RolesGuard } from './common/guards/roles.guard';
   ],
   controllers: [AppController],
   providers: [
-    AppService,
+    // Rate limiting enforced on every route
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    // Role-based access control
     {
       provide: APP_GUARD,
       useClass: RolesGuard,

@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { User } from '../../entities';
 import { RegisterDto, LoginDto } from './dto';
 
@@ -21,38 +22,42 @@ export class AuthService {
     private usersRepository: Repository<User>,
   ) {}
 
+  // ─── Token helpers ──────────────────────────────────────────────────────────
+
   async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return bcrypt.hash(password, saltRounds);
+    return bcrypt.hash(password, 10);
   }
 
   async comparePasswords(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
   }
 
-  generateAccessToken(userId: string, email: string, role: string): string {
-    const payload = {
-      sub: userId,
-      email,
-      role,
-    };
+  /**
+   * One-way SHA-256 hash for refresh token storage.
+   * Fast (tokens already have entropy) and avoids storing raw tokens in DB.
+   */
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
 
-    return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_SECRET'),
-      expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m',
-    } as any);
+  generateAccessToken(userId: string, email: string, role: string): string {
+    return this.jwtService.sign(
+      { sub: userId, email, role },
+      {
+        secret: this.configService.get<string>('JWT_SECRET'),
+        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m',
+      } as any,
+    );
   }
 
   generateRefreshToken(userId: string): string {
-    const payload = {
-      sub: userId,
-      type: 'refresh',
-    };
-
-    return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d',
-    } as any);
+    return this.jwtService.sign(
+      { sub: userId, type: 'refresh' },
+      {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d',
+      } as any,
+    );
   }
 
   verifyRefreshToken(token: string): any {
@@ -60,27 +65,23 @@ export class AuthService {
       return this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
 
-  async register(registerDto: RegisterDto): Promise<{ user: User; access_token: string; refresh_token: string }> {
+  // ─── Auth operations ─────────────────────────────────────────────────────────
+
+  async register(registerDto: RegisterDto): Promise<{ user: Omit<User, 'password' | 'refresh_token'>; access_token: string; refresh_token: string }> {
     const { email, password, first_name, last_name, phone } = registerDto;
 
-    // Check if user already exists
-    const existingUser = await this.usersRepository.findOne({
-      where: { email },
-    });
-
+    const existingUser = await this.usersRepository.findOne({ where: { email } });
     if (existingUser) {
       throw new ConflictException('Email already registered');
     }
 
-    // Hash password
     const hashedPassword = await this.hashPassword(password);
 
-    // Create new user
     const user = this.usersRepository.create({
       email,
       password: hashedPassword,
@@ -93,116 +94,90 @@ export class AuthService {
 
     const savedUser = await this.usersRepository.save(user);
 
-    // Generate tokens
     const access_token = this.generateAccessToken(savedUser.id, savedUser.email, savedUser.role);
     const refresh_token = this.generateRefreshToken(savedUser.id);
 
-    // Store refresh token
+    // Store only the hash — raw token never persisted
     await this.usersRepository.update(savedUser.id, {
-      refresh_token,
+      refresh_token: this.hashToken(refresh_token),
     });
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = savedUser;
-
-    return {
-      user: userWithoutPassword as User,
-      access_token,
-      refresh_token,
-    };
+    const { password: _, refresh_token: __, ...userSafe } = savedUser;
+    return { user: userSafe as any, access_token, refresh_token };
   }
 
-  async login(loginDto: LoginDto): Promise<{ user: User; access_token: string; refresh_token: string }> {
+  async login(loginDto: LoginDto): Promise<{ user: Omit<User, 'password' | 'refresh_token'>; access_token: string; refresh_token: string }> {
     const { email, password } = loginDto;
 
-    // Find user by email
-    const user = await this.usersRepository.findOne({
-      where: { email },
-    });
+    const user = await this.usersRepository.findOne({ where: { email } });
 
+    // Constant-time response regardless of whether user exists (prevents user enumeration)
     if (!user) {
+      await bcrypt.hash(password, 10); // dummy hash to equalise timing
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Check if user is active
     if (!user.is_active) {
-      throw new UnauthorizedException('User account is inactive');
+      throw new UnauthorizedException('Account is inactive');
     }
 
-    // Compare passwords
     const isPasswordValid = await this.comparePasswords(password, user.password);
-
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Update last login
-    await this.usersRepository.update(user.id, {
-      last_login_at: new Date(),
-    });
-
-    // Generate tokens
     const access_token = this.generateAccessToken(user.id, user.email, user.role);
     const refresh_token = this.generateRefreshToken(user.id);
 
-    // Store refresh token
+    // Store hash + update last login in a single query
     await this.usersRepository.update(user.id, {
-      refresh_token,
+      refresh_token: this.hashToken(refresh_token),
+      last_login_at: new Date(),
     });
 
-    // Return user without password
-    const { password: _, ...userWithoutPassword } = user;
-
-    return {
-      user: userWithoutPassword as User,
-      access_token,
-      refresh_token,
-    };
+    const { password: _, refresh_token: __, ...userSafe } = user;
+    return { user: userSafe as any, access_token, refresh_token };
   }
 
   async refreshToken(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
-    // Verify refresh token
     const payload = this.verifyRefreshToken(refreshToken);
 
-    // Find user
-    const user = await this.usersRepository.findOne({
-      where: { id: payload.sub },
-    });
-
+    const user = await this.usersRepository.findOne({ where: { id: payload.sub } });
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Verify stored refresh token matches
-    if (user.refresh_token !== refreshToken) {
-      throw new UnauthorizedException('Refresh token mismatch');
+    if (!user.refresh_token) {
+      throw new UnauthorizedException('Session expired, please log in again');
     }
 
-    // Generate new tokens
+    // Compare hash of incoming token against stored hash
+    const incomingHash = this.hashToken(refreshToken);
+    if (user.refresh_token !== incomingHash) {
+      // Possible token theft — invalidate session immediately
+      await this.usersRepository.update(user.id, { refresh_token: null as any });
+      throw new UnauthorizedException('Refresh token invalid, session terminated');
+    }
+
     const access_token = this.generateAccessToken(user.id, user.email, user.role);
     const new_refresh_token = this.generateRefreshToken(user.id);
 
-    // Store new refresh token
     await this.usersRepository.update(user.id, {
-      refresh_token: new_refresh_token,
+      refresh_token: this.hashToken(new_refresh_token),
     });
 
-    return {
-      access_token,
-      refresh_token: new_refresh_token,
-    };
+    return { access_token, refresh_token: new_refresh_token };
   }
 
   async logout(userId: string): Promise<void> {
-    // Clear refresh token
-    await this.usersRepository.update(userId, {
-      refresh_token: '' as any,
-    });
+    await this.usersRepository.update(userId, { refresh_token: null as any });
   }
 
-  async validateUser(userId: string): Promise<User | null> {
-    return this.usersRepository.findOne({
+  async validateUser(userId: string): Promise<Omit<User, 'password' | 'refresh_token'> | null> {
+    const user = await this.usersRepository.findOne({
       where: { id: userId },
+      select: ['id', 'email', 'first_name', 'last_name', 'role', 'is_active', 'store_id'],
     });
+    return user;
   }
 }

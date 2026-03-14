@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductSizeInventory } from '../../entities';
@@ -67,6 +67,10 @@ export class InventoryService {
     id: string,
     quantity: number,
   ): Promise<ProductSizeInventory> {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException('Quantity must be a positive integer');
+    }
+
     const inventory = await this.inventoryRepository.findOne({
       where: { id },
     });
@@ -87,6 +91,10 @@ export class InventoryService {
     id: string,
     quantity: number,
   ): Promise<ProductSizeInventory> {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException('Quantity must be a positive integer');
+    }
+
     const inventory = await this.inventoryRepository.findOne({
       where: { id },
     });

@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order, OrderItem, PaymentTransaction } from '../../entities';
 import { CreateOrderDto } from './dto';
-import { v4 as uuidv4 } from 'uuid';
 import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
@@ -22,7 +21,8 @@ export class OrdersService {
   async generateOrderNumber(): Promise<string> {
     const date = new Date();
     const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-    const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    // 8 alphanumeric chars = 36^8 ≈ 2.8 trillion combinations — no collision risk
+    const random = Math.random().toString(36).substring(2, 10).toUpperCase();
     return `ORD-${dateStr}-${random}`;
   }
 
@@ -164,7 +164,7 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, status: string, adminNotes?: string): Promise<Order> {
-    const order = await this.findById(id);
+    await this.findById(id); // throws NotFoundException if not found
 
     // Validate status transition
     const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];

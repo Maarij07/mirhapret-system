@@ -1,23 +1,20 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, Between } from 'typeorm';
-import { Product, ProductSizeInventory, ProductAnalytic } from '../../entities';
+import { Repository } from 'typeorm';
+import { Product, ProductAnalytic } from '../../entities';
 import { CreateProductDto, UpdateProductDto } from './dto';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
-    @InjectRepository(ProductSizeInventory)
-    private sizeInventoryRepository: Repository<ProductSizeInventory>,
     @InjectRepository(ProductAnalytic)
     private analyticsRepository: Repository<ProductAnalytic>,
   ) {}
 
   private generateSku(): string {
-    return `SKU-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    return `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
   }
 
   private generateSlug(name: string): string {
@@ -68,8 +65,8 @@ export class ProductsService {
 
     const total = await query.getCount();
 
-    const skip = filters?.skip || 0;
-    const take = filters?.take || 20;
+    const skip = Math.max(0, filters?.skip || 0);
+    const take = Math.min(100, Math.max(1, filters?.take || 20));
 
     const data = await query
       .orderBy('product.created_at', 'DESC')
@@ -154,7 +151,7 @@ export class ProductsService {
   }
 
   async delete(id: string): Promise<void> {
-    const product = await this.findById(id);
+    await this.findById(id);
     await this.productsRepository.delete(id);
   }
 

@@ -89,6 +89,7 @@ export class SearchService {
   }
 
   async getSearchSuggestions(query: string, limit = 10) {
+    limit = Math.min(20, Math.max(1, limit));
     const products = await this.productRepository.find({
       where: [
         { name: ILike(`${query}%`) },
@@ -111,6 +112,7 @@ export class SearchService {
   }
 
   async getTrendingSearches(limit = 10) {
+    limit = Math.min(50, Math.max(1, limit));
     // Return recently added/updated products as trending
     const trending = await this.productRepository.find({
       where: { is_active: true },

@@ -80,19 +80,16 @@ export class PaymentsService {
   }
 
   async getPaymentHistory(userId: string, skip = 0, take = 20) {
-    // Get payments through orders (PaymentTransaction -> Order relationship)
-    const [payments, total] = await this.paymentRepository.findAndCount({
-      relations: ['order'],
-      order: { created_at: 'DESC' },
-      skip,
-      take,
-    });
+    const [payments, total] = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoinAndSelect('payment.order', 'order')
+      .where('order.customer_id = :userId', { userId })
+      .orderBy('payment.created_at', 'DESC')
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
 
-    // Filter by user through order relationship (in service layer)
-    const userPayments = payments.filter(p => p.order && p.order.customer_id === userId);
-    const userTotal = payments.filter(p => p.order && p.order.customer_id === userId).length;
-
-    return { payments: userPayments, total: userTotal };
+    return { payments, total };
   }
 
   async getPaymentStatus(paymentId: string) {

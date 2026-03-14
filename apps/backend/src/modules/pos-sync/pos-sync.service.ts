@@ -31,23 +31,25 @@ export class POSSyncService {
       pos_device_id: pushSyncDto.device_id,
     });
 
+    let conflictException: ConflictException | null = null;
+
     try {
       // Process created orders
       for (const order of pushSyncDto.orders_created) {
-        // This would merge with existing orders, handle duplicates
         const existingOrder = await this.orderRepository.findOne({
           where: { id: order.id },
         });
 
         if (existingOrder && existingOrder.updated_at > pushSyncDto.sync_timestamp) {
-          // Conflict detected
+          // Conflict detected — record it, then exit the loop cleanly
           syncLog.status = 'conflict';
           syncLog.conflict_details = {
             order_id: order.id,
             backend_updated_at: existingOrder.updated_at,
             device_updated_at: pushSyncDto.sync_timestamp,
           };
-          throw new ConflictException('Data conflict detected');
+          conflictException = new ConflictException('Data conflict detected');
+          break;
         }
 
         if (!existingOrder) {
@@ -55,21 +57,27 @@ export class POSSyncService {
         }
       }
 
-      // Process inventory changes
-      for (const inv of pushSyncDto.inventory_changes) {
-        await this.inventoryRepository.update(inv.id, {
-          quantity: inv.quantity,
-        });
+      // Only process inventory if no conflict was found
+      if (!conflictException) {
+        for (const inv of pushSyncDto.inventory_changes) {
+          await this.inventoryRepository.update(inv.id, { quantity: inv.quantity });
+        }
+        syncLog.status = 'success';
+        syncLog.synced_at = new Date();
       }
-
-      syncLog.status = 'success';
-      syncLog.synced_at = new Date();
     } catch (error) {
+      // Only catch genuine runtime errors, not our own business exceptions
       syncLog.status = 'failed';
       syncLog.error_message = error.message;
     }
 
+    // Always persist the sync log so history is complete
     const saved = await this.syncLogRepository.save(syncLog);
+
+    if (conflictException) {
+      throw conflictException;
+    }
+
     return saved;
   }
 
@@ -82,19 +90,15 @@ export class POSSyncService {
     });
 
     try {
-      // Get updated products since last sync
+      const hasLastSync = lastSyncTime && lastSyncTime.getTime() > 0;
+
       const updatedProducts = await this.productRepository.find({
-        where: lastSyncTime && lastSyncTime.getTime() > 0
-          ? { updated_at: MoreThan(lastSyncTime) }
-          : undefined,
-        take: 1000, // Limit to prevent huge payloads
+        where: hasLastSync ? { updated_at: MoreThan(lastSyncTime) } : undefined,
+        take: 1000,
       });
 
-      // Get updated inventory
       const updatedInventory = await this.inventoryRepository.find({
-        where: lastSyncTime && lastSyncTime.getTime() > 0
-          ? { updated_at: MoreThan(lastSyncTime) }
-          : undefined,
+        where: hasLastSync ? { updated_at: MoreThan(lastSyncTime) } : undefined,
         take: 1000,
       });
 
@@ -111,14 +115,10 @@ export class POSSyncService {
       syncLog.error_message = error.message;
     }
 
-    const saved = await this.syncLogRepository.save(syncLog);
-    return saved;
+    return this.syncLogRepository.save(syncLog);
   }
 
-  async resolveSyncConflict(
-    cashierId: string,
-    resolveSyncConflictDto: ResolveSyncConflictDto,
-  ) {
+  async resolveSyncConflict(cashierId: string, resolveSyncConflictDto: ResolveSyncConflictDto) {
     const syncLog = await this.syncLogRepository.findOne({
       where: { id: resolveSyncConflictDto.sync_log_id, cashier_id: cashierId },
     });
@@ -133,58 +133,46 @@ export class POSSyncService {
 
     const conflictDetails = syncLog.conflict_details;
 
-    // Apply resolution based on type
-    if (resolveSyncConflictDto.resolution_type === 'backend_wins') {
-      // Keep backend version (do nothing)
-    } else if (resolveSyncConflictDto.resolution_type === 'device_wins') {
-      // Overwrite with device data
+    if (resolveSyncConflictDto.resolution_type === 'device_wins') {
       const deviceData = syncLog.data_pushed;
       const order = deviceData.orders_created.find(
-        o => o.id === conflictDetails.order_id,
+        (o: any) => o.id === conflictDetails.order_id,
       );
       if (order) {
         await this.orderRepository.save(order);
       }
     } else if (resolveSyncConflictDto.resolution_type === 'manual_merge') {
-      // Apply manually merged data
       await this.orderRepository.save(resolveSyncConflictDto.resolved_data);
     }
+    // 'backend_wins' requires no action — backend data is already current
 
     syncLog.status = 'success';
     syncLog.synced_at = new Date();
 
-    const saved = await this.syncLogRepository.save(syncLog);
-    return saved;
+    return this.syncLogRepository.save(syncLog);
   }
 
   async getSyncHistory(cashierId: string, skip = 0, take = 20) {
     const [logs, total] = await this.syncLogRepository.findAndCount({
       where: { cashier_id: cashierId },
-      skip,
-      take,
+      skip: Math.max(0, skip),
+      take: Math.min(100, Math.max(1, take)),
       order: { created_at: 'DESC' },
     });
-
     return { logs, total };
   }
 
   async getPendingSyncs(cashierId: string) {
-    const logs = await this.syncLogRepository.find({
+    return this.syncLogRepository.find({
       where: { cashier_id: cashierId, status: 'pending' },
     });
-
-    return logs;
   }
 
   async getSyncStatus(syncLogId: string) {
-    const log = await this.syncLogRepository.findOne({
-      where: { id: syncLogId },
-    });
-
+    const log = await this.syncLogRepository.findOne({ where: { id: syncLogId } });
     if (!log) {
       throw new NotFoundException('Sync log not found');
     }
-
     return log;
   }
 }

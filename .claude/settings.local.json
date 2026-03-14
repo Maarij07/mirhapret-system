@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la apps/backend/src/modules/*/)",
+      "Bash(wc -l apps/backend/src/entities/*.ts)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(npx ts-node:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(node -e \":*)"
+    ]
+  }
+}
